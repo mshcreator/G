@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة اختبار جدول الضرب المباشر - أ. فاطمة شنيمر</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&family=Tajawal:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Firebase Imports for Realtime Cloud Database -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, collection, onSnapshot, query, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase Initialization
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'fatima-multiplication-quiz';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-key",
+            authDomain: "demo.firebaseapp.com",
+            projectId: "demo-project",
+            storageBucket: "demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:demo"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.db = db;
+        window.appId = appId;
+        window.auth = auth;
+
+        // Auto Authenticate
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.log("Auth initialized/anonymous fallback");
+            }
+        }
+        initAuth();
+    </script>
+
+    <style>
+        * {
+            font-family: 'Cairo', 'Tajawal', sans-serif;
+            font-variant-numeric: traditional;
+            user-select: none;
+        }
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printArea, #printArea * {
+                visibility: visible;
+            }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                color: black !important;
+                background: white !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="p-2 md:p-6 flex flex-col justify-between min-h-screen">
+
+    <!-- TOP HEADER NAVBAR -->
+    <header class="max-w-6xl mx-auto w-full bg-slate-800/90 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-slate-700 flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 bg-amber-500 text-slate-900 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg border-2 border-amber-300">
+                <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <div>
+                <h1 class="text-lg md:text-xl font-black text-amber-400">منصة اختبار جدول الضرب المباشر</h1>
+                <p class="text-xs text-slate-400">إعداد المعلمة القديرة: <span class="text-amber-300 font-bold">فاطمة شنيمر</span></p>
+            </div>
+        </div>
+
+        <!-- Mode Navigation Buttons -->
+        <div class="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-700">
+            <button id="navStudentBtn" onclick="switchView('student')" class="px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all bg-amber-500 text-slate-950 shadow">
+                <i class="fa-solid fa-user-pen ml-1"></i> بوابـة الطالبة
+            </button>
+            <button id="navTeacherBtn" onclick="switchView('teacher')" class="px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all text-slate-300 hover:text-white">
+                <i class="fa-solid fa-chalkboard-user ml-1"></i> لوحة رصد المعلمة المباشرة (<span id="liveCountBadge">٠</span>)
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="max-w-6xl mx-auto w-full flex-grow flex flex-col gap-4">
+
+        <!-- ==================== 1. STUDENT TESTING SECTION ==================== -->
+        <div id="studentSection" class="flex flex-col gap-4">
+            
+            <!-- Student Setup Card -->
+            <div id="studentSetupCard" class="bg-slate-800 rounded-3xl p-6 md:p-8 border border-slate-700 shadow-2xl max-w-lg mx-auto w-full text-center">
+                <div class="w-20 h-20 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl border border-amber-500/40">
+                    <i class="fa-solid fa-star"></i>
+                </div>
+                <h2 class="text-2xl font-black text-amber-400 mb-2">أهلاً بكِ في اختبار الضرب 🌟</h2>
+                <p class="text-xs text-slate-400 mb-6">أدخلي اسمكِ واختاري جدول الضرب للبدء في التحدي مباشرة!</p>
+
+                <div class="space-y-4 text-right mb-6">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1">اسم الطالبة الثلاثي:</label>
+                        <input type="text" id="studentNameInput" placeholder="اكتبي اسمك هنا..." class="w-full bg-slate-950 border-2 border-slate-700 focus:border-amber-400 rounded-xl px-4 py-3 text-amber-300 font-bold focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-300 mb-1">اختر جدول الضرب المراد اختباره:</label>
+                        <select id="studentTableSelect" class="w-full bg-slate-950 border-2 border-slate-700 focus:border-amber-400 rounded-xl px-4 py-3 text-amber-300 font-black focus:outline-none">
+                            <option value="1">جدول (١)</option>
+                            <option value="2" selected>جدول (٢)</option>
+                            <option value="3">جدول (٣)</option>
+                            <option value="4">جدول (٤)</option>
+                            <option value="5">جدول (٥)</option>
+                            <option value="6">جدول (٦)</option>
+                            <option value="7">جدول (٧)</option>
+                            <option value="8">جدول (٨)</option>
+                            <option value="9">جدول (٩)</option>
+                            <option value="10">جدول (١٠)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="startStudentQuiz()" class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl shadow-lg text-base transition-all flex items-center justify-center gap-2">
+                    <span>ابدأي الاختبار الآن</span>
+                    <i class="fa-solid fa-play"></i>
+                </button>
+            </div>
+
+            <!-- Active Quiz Container -->
+            <div id="quizContainer" class="hidden bg-slate-800 rounded-3xl p-6 md:p-10 border border-slate-700 shadow-2xl max-w-2xl mx-auto w-full flex flex-col items-center gap-6">
+                
+                <!-- Progress Header -->
+                <div class="w-full flex items-center justify-between bg-slate-950 p-3 px-5 rounded-2xl border border-slate-800">
+                    <span class="text-xs text-slate-400 font-bold">السؤال: <strong id="questionProgress" class="text-amber-400 text-base">١ / ١٠</strong></span>
+                    <span id="quizStudentBadge" class="text-xs font-bold text-slate-300">الطالبة: ---</span>
+                </div>
+
+                <!-- Equation Box -->
+                <div class="bg-gradient-to-r from-amber-500/20 to-amber-600/10 border-2 border-amber-500/50 rounded-3xl p-8 w-full text-center shadow-inner">
+                    <span id="equationText" class="text-5xl md:text-6xl font-black text-amber-400 font-mono tracking-widest">
+                        ١ × ٢ = ؟
+                    </span>
+                </div>
+
+                <!-- Answer Input & Submit -->
+                <div class="w-full space-y-4">
+                    <div class="flex items-center gap-3 justify-center">
+                        <input type="text" id="answerInput" inputmode="numeric" placeholder="الناتج..." class="w-32 h-14 text-center font-black text-3xl text-amber-300 bg-slate-950 border-2 border-amber-500/50 rounded-2xl focus:outline-none focus:border-amber-400 shadow-inner">
+                    </div>
+
+                    <!-- Custom On-Screen Keypad for Easy Typing -->
+                    <div class="grid grid-cols-5 gap-2 max-w-sm mx-auto">
+                        <button onclick="pressKey('١')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">١</button>
+                        <button onclick="pressKey('٢')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٢</button>
+                        <button onclick="pressKey('٣')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٣</button>
+                        <button onclick="pressKey('٤')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٤</button>
+                        <button onclick="pressKey('٥')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٥</button>
+                        <button onclick="pressKey('٦')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٦</button>
+                        <button onclick="pressKey('٧')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٧</button>
+                        <button onclick="pressKey('٨')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٨</button>
+                        <button onclick="pressKey('٩')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٩</button>
+                        <button onclick="pressKey('٠')" class="py-2.5 bg-slate-900 hover:bg-slate-700 text-amber-300 font-black rounded-xl text-lg border border-slate-700">٠</button>
+                    </div>
+
+                    <div class="flex items-center gap-2 max-w-sm mx-auto">
+                        <button onclick="clearKey()" class="py-3 px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold rounded-xl text-sm flex-1">مسح</button>
+                        <button onclick="submitAnswer()" class="py-3 px-6 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-base flex-2 shadow-lg flex items-center justify-center gap-1.5">
+                            <span>تأكيد الإجابة</span>
+                            <i class="fa-solid fa-circle-check"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Quiz Result & Completion Banner -->
+            <div id="quizResultCard" class="hidden bg-slate-800 rounded-3xl p-8 border-2 border-emerald-500/50 shadow-2xl max-w-lg mx-auto w-full text-center space-y-4">
+                <div class="w-20 h-20 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-4xl">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <h2 class="text-2xl font-black text-amber-400">ممتازة يا بطلة! 🎉</h2>
+                <p class="text-sm text-slate-300">تم إرسال درجتكِ ورصدها مباشرة في لوحة المعلمة <strong class="text-amber-300">فاطمة شنيمر</strong>.</p>
+                
+                <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <span class="text-xs text-slate-400 block mb-1">الدرجة النهائية:</span>
+                    <span id="finalScoreText" class="text-4xl font-black text-emerald-400">١٠ / ١٠</span>
+                </div>
+
+                <button onclick="resetStudentQuiz()" class="px-6 py-3 bg-amber-500 text-slate-950 font-black rounded-xl text-sm shadow">
+                    اختبار جدول آخر 🔄
+                </button>
+            </div>
+
+        </div>
+
+
+        <!-- ==================== 2. LIVE TEACHER DASHBOARD ==================== -->
+        <div id="teacherSection" class="hidden flex-col gap-4">
+            
+            <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 shadow-xl flex flex-col gap-4">
+                
+                <!-- Dashboard Control Header -->
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 pb-4">
+                    <div>
+                        <h2 class="text-xl font-black text-amber-400 flex items-center gap-2">
+                            <span>لوحة رصد درجات الطالبات المباشرة</span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+                        </h2>
+                        <p class="text-xs text-slate-400">تظهر هنا نتائج الطالبات فور انتهائهن من الاختبار في نفس الحصة تلقائياً</p>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="window.print()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow">
+                            <i class="fa-solid fa-print"></i> طباعة كشف الرصد
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Results Table Area -->
+                <div id="printArea" class="overflow-x-auto rounded-2xl border border-slate-700">
+                    <table class="w-full text-right border-collapse">
+                        <thead>
+                            <tr class="bg-slate-900 text-amber-400 text-xs md:text-sm font-black border-b border-slate-700">
+                                <th class="p-3">#</th>
+                                <th class="p-3">اسم الطالبة</th>
+                                <th class="p-3">جدول الضرب</th>
+                                <th class="p-3">الإجابات الصحيحة</th>
+                                <th class="p-3">النسبة المئوية</th>
+                                <th class="p-3">التقدير المستحق</th>
+                                <th class="p-3">وقت الإنجاز</th>
+                            </tr>
+                        </thead>
+                        <tbody id="liveResultsTableBody" class="text-sm font-bold divide-y divide-slate-800">
+                            <tr>
+                                <td colspan="7" class="p-6 text-center text-slate-500">في انتظار إنهاء الطالبات للاختبار... ⏳</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="max-w-6xl mx-auto w-full text-center text-xs text-slate-500 py-3 no-print">
+        جميع الحقوق محفوظة - منصة اختبارات جدول الضرب أونلاين &copy; 2026 | المعلمة فاطمة شنيمر
+    </footer>
+
+    <!-- JAVASCRIPT & REALTIME DATABASE LOGIC -->
+    <script>
+        // Eastern Arabic Digit Conversion
+        const arabicMap = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        function toAr(num) {
+            if (num === undefined || num === null) return '';
+            return num.toString().replace(/[0-9]/g, d => arabicMap[d]);
+        }
+        function parseAr(str) {
+            if (!str) return NaN;
+            const western = str.toString()
+                .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+                .replace(/[0-9]/g, d => d);
+            return parseInt(western, 10);
+        }
+
+        // State Management
+        let studentName = '';
+        let selectedTable = 2;
+        let currentQuestionIndex = 1;
+        let correctAnswersCount = 0;
+        let liveResults = [];
+        let randomizedQuestions = []; // Array to store shuffled multipliers (1-10)
+        let currentMultiplier = 1;
+
+        // View Navigation
+        function switchView(view) {
+            const studentSec = document.getElementById('studentSection');
+            const teacherSec = document.getElementById('teacherSection');
+            const btnS = document.getElementById('navStudentBtn');
+            const btnT = document.getElementById('navTeacherBtn');
+
+            if (view === 'student') {
+                studentSec.classList.remove('hidden');
+                teacherSec.classList.add('hidden');
+                btnS.className = "px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all bg-amber-500 text-slate-950 shadow";
+                btnT.className = "px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all text-slate-300 hover:text-white";
+            } else {
+                studentSec.classList.add('hidden');
+                teacherSec.classList.remove('hidden');
+                btnT.className = "px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all bg-amber-500 text-slate-950 shadow";
+                btnS.className = "px-4 py-2 rounded-lg font-bold text-xs md:text-sm transition-all text-slate-300 hover:text-white";
+            }
+        }
+
+        // Keypad logic
+        function pressKey(digit) {
+            const input = document.getElementById('answerInput');
+            input.value += digit;
+        }
+
+        function clearKey() {
+            document.getElementById('answerInput').value = '';
+        }
+
+        // Quiz Engine
+        function startStudentQuiz() {
+            const nameInput = document.getElementById('studentNameInput').value.trim();
+            if (!nameInput) {
+                alert('يرجى كتابة اسم الطالبة أولاً!');
+                return;
+            }
+
+            studentName = nameInput;
+            selectedTable = parseInt(document.getElementById('studentTableSelect').value, 10);
+            currentQuestionIndex = 1;
+            correctAnswersCount = 0;
+
+            // Generate Randomized Multipliers Array (1 to 10 shuffled)
+            randomizedQuestions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].sort(() => Math.random() - 0.5);
+
+            document.getElementById('studentSetupCard').classList.add('hidden');
+            document.getElementById('quizContainer').classList.remove('hidden');
+            document.getElementById('quizStudentBadge').textContent = `الطالبة: ${studentName}`;
+
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            currentMultiplier = randomizedQuestions[currentQuestionIndex - 1];
+            document.getElementById('questionProgress').textContent = `${toAr(currentQuestionIndex)} / ١٠`;
+            document.getElementById('equationText').innerHTML = `${toAr(currentMultiplier)} × ${toAr(selectedTable)} = <span class="text-amber-400">؟</span>`;
+            document.getElementById('answerInput').value = '';
+            document.getElementById('answerInput').focus();
+        }
+
+        function submitAnswer() {
+            const inputVal = document.getElementById('answerInput').value.trim();
+            const num = parseAr(inputVal);
+            const expected = currentMultiplier * selectedTable;
+
+            if (!isNaN(num) && num === expected) {
+                correctAnswersCount++;
+            }
+
+            if (currentQuestionIndex < 10) {
+                currentQuestionIndex++;
+                loadQuestion();
+            } else {
+                finishQuizAndUpload();
+            }
+        }
+
+        // Realtime Upload to Firebase Database
+        async function finishQuizAndUpload() {
+            document.getElementById('quizContainer').classList.add('hidden');
+            document.getElementById('quizResultCard').classList.remove('hidden');
+            document.getElementById('finalScoreText').textContent = `${toAr(correctAnswersCount)} / ١٠`;
+
+            const percentage = (correctAnswersCount / 10) * 100;
+            let grade = 'يحتاج تدريب ⚠️';
+            if (percentage >= 90) grade = 'ممتاز جداً 🌟';
+            else if (percentage >= 75) grade = 'متقن 👏';
+
+            const record = {
+                studentName: studentName,
+                tableTested: selectedTable,
+                correctCount: correctAnswersCount,
+                percentage: percentage,
+                grade: grade,
+                timestamp: new Date().toLocaleTimeString('ar-SA')
+            };
+
+            // Save to Firestore Online
+            try {
+                if (window.db && window.appId) {
+                    const { collection, addDoc } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                    const path = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'student_quiz_results');
+                    await addDoc(path, record);
+                }
+            } catch (e) {
+                console.log("Saving locally as fallback");
+            }
+
+            // Fallback Local Storage
+            const localData = JSON.parse(localStorage.getItem('fs_live_quiz_results') || '[]');
+            localData.unshift(record);
+            localStorage.setItem('fs_live_quiz_results', JSON.stringify(localData));
+            renderTable(localData);
+        }
+
+        function resetStudentQuiz() {
+            document.getElementById('quizResultCard').classList.add('hidden');
+            document.getElementById('studentSetupCard').classList.remove('hidden');
+            document.getElementById('studentNameInput').value = '';
+        }
+
+        // Subscribe to Realtime Updates
+        function subscribeToRealtimeResults() {
+            const checkInterval = setInterval(async () => {
+                if (window.db && window.appId) {
+                    clearInterval(checkInterval);
+                    try {
+                        const { collection, onSnapshot } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                        const path = collection(window.db, 'artifacts', window.appId, 'public', 'data', 'student_quiz_results');
+                        
+                        onSnapshot(path, (snapshot) => {
+                            const results = [];
+                            snapshot.forEach(doc => results.push(doc.data()));
+                            liveResults = results;
+                            renderTable(results);
+                        }, (err) => {
+                            console.log("Fallback to local storage snapshot");
+                        });
+                    } catch (e) {}
+                }
+            }, 500);
+        }
+
+        function renderTable(dataList) {
+            const body = document.getElementById('liveResultsTableBody');
+            body.innerHTML = '';
+
+            const list = dataList && dataList.length > 0 ? dataList : JSON.parse(localStorage.getItem('fs_live_quiz_results') || '[]');
+
+            document.getElementById('liveCountBadge').textContent = toAr(list.length);
+
+            if (list.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-500">في انتظار إنهاء الطالبات للاختبار... ⏳</td></tr>';
+                return;
+            }
+
+            list.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-800 hover:bg-slate-800/50';
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-400">${toAr(idx + 1)}</td>
+                    <td class="p-3 text-amber-300 font-black">${item.studentName}</td>
+                    <td class="p-3 text-slate-300">جدول (${toAr(item.tableTested)})</td>
+                    <td class="p-3 text-emerald-400">${toAr(item.correctCount)} / ١٠</td>
+                    <td class="p-3 text-amber-400 font-black">${toAr(item.percentage)}%</td>
+                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-900 border border-slate-700 text-slate-300">${item.grade}</span></td>
+                    <td class="p-3 text-xs text-slate-400">${item.timestamp || 'الآن'}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        window.onload = function() {
+            subscribeToRealtimeResults();
+            const localData = JSON.parse(localStorage.getItem('fs_live_quiz_results') || '[]');
+            renderTable(localData);
+        };
+    </script>
+</body>
+</html>
